@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # _Sample project_
 
 (See the README.md file in the upper level 'examples' directory for more information about examples.)
@@ -30,3 +31,7 @@ Below is short explanation of remaining files in the project folder.
 ```
 Additionally, the sample project contains Makefile and component.mk files, used for the legacy Make based build system. 
 They are not used or needed when building with CMake and idf.py.
+=======
+# esp32-web-esp-idf-
+(in the future) working web running on my esp32 using NVS flash, currently nothing works, but you can change the .method of uri handlers to HTTP_GET and change the link to 192.168.X.X/gpio/on or off to send signal to your gpio (gpio4).
+>>>>>>> 7f8ea721547c26d87fe8e8546f7bbfadf6cb834f
