@@ -1,0 +1,28 @@
+:root {
+    --background-primary: rgb(202, 202, 222);
+    --font-family: Monospace;
+    --color-text-primary: rgb(28, 28, 28);
+    --button-color-primary: rgba(29, 29, 29);
+    --button-text-primary: rgb(244, 244, 244);
+}
+
+.darkMode {
+    --background-primary: rgb(58, 58, 58);
+    --color-text-primary: rgb(222, 222, 222);
+    --button-color-primary: rgb(235, 235, 235);
+    --button-text-primary: rgb(46, 46, 46);
+}
+
+body {
+    background-color: var(--background-primary);
+    color: var(--color-text-primary);
+    transition: background-color 0.5s, color 0.511s;
+}
+
+.button {
+    background-color: var(--button-color-primary);
+    color: var(--button-text-primary);
+    font-family: var(--font-family);
+    padding: 10px;
+    border: none;
+}
