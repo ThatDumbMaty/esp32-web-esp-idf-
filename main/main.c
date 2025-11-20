@@ -19,7 +19,15 @@ const char *pass = WIFI_PASS;
 
 httpd_handle_t start_webserver(void);
 
-
+esp_err_t index_handler(httpd_req_t *req)
+{
+    
+    printf("LED/GPIO ON by web request.\n");
+    
+    // Response to the browser
+    httpd_resp_send(req, "<h1>Welcome to main page</h1>", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
 // Handler for turning the LED ON (e.g., accessed via HTTP POST /gpio/on)
 esp_err_t gpio_on_handler(httpd_req_t *req)
 {
@@ -56,14 +64,20 @@ httpd_handle_t start_webserver(void)
     // URI Handler Registration
     httpd_uri_t uri_on = {
         .uri       = "/gpio/on",
-        .method    = HTTP_POST,
+        .method    = HTTP_GET,
         .handler   = gpio_on_handler,
         .user_ctx  = NULL
     };
     httpd_uri_t uri_off = {
         .uri       = "/gpio/off",
-        .method    = HTTP_POST,
+        .method    = HTTP_GET,
         .handler   = gpio_off_handler,
+        .user_ctx  = NULL
+    };
+    httpd_uri_t uri_main = {
+        .uri       = "/",
+        .method    = HTTP_GET,
+        .handler   = index_handler,
         .user_ctx  = NULL
     };
 
@@ -72,6 +86,7 @@ httpd_handle_t start_webserver(void)
         
         httpd_register_uri_handler(server, &uri_on);
         httpd_register_uri_handler(server, &uri_off);
+        httpd_register_uri_handler(server, &uri_main);
     }
     return server;
 }
