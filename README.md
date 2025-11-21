@@ -1,1 +1,8 @@
-(in the future) working web running on my esp32 using NVS flash, currently nothing works, but you can change the .method of uri handlers to HTTP_GET and change the link to 192.168.X.X/gpio/on or off to send signal to your gpio (gpio4).
+working now!
+
+What you need:
+-esp32
+-LED with a resistor (optional, anything you want to control with a button)
+
+now with working index.html using spiffs, will be adding .css and .js soon,
+still learning esp32, will be adding more very cool stuff :)
