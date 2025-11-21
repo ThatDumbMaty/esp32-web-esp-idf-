@@ -68,29 +68,117 @@ esp_err_t index_handler(httpd_req_t *req)
 
     return ESP_OK;
 }
+esp_err_t css_handler(httpd_req_t *req)
+{
+    // Cesta k souboru na SPIFFS
+    const char *file_path = "/spiffs/styling.css";
+    
+    // Otevření souboru pro čtení
+    FILE *f = fopen(file_path, "r");
+    if (f == NULL) {
+        // Pokud se soubor nepodaří otevřít (neexistuje, nebo SPIFFS neni mountnuto)
+        httpd_resp_send_500(req);
+        printf("Chyba: Nepodařilo se otevřít %s\n", file_path);
+        return ESP_FAIL;
+    }
+
+    // Získání velikosti souboru
+    fseek(f, 0, SEEK_END);
+    long file_size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    // Alokace bufferu pro celý obsah souboru + 1 pro '\0'
+    char *buffer = (char *)malloc(file_size + 1);
+    if (buffer == NULL) {
+        fclose(f);
+        httpd_resp_send_500(req);
+        printf("Chyba: Nedostatek paměti pro alokaci bufferu.\n");
+        return ESP_FAIL;
+    }
+
+    // Přečtení obsahu souboru do bufferu
+    size_t read_bytes = fread(buffer, 1, file_size, f);
+    fclose(f);
+    buffer[read_bytes] = '\0'; // Ukončení řetězce
+
+    // Nastavení Content-Type hlavičky
+    httpd_resp_set_type(req, "text/css");
+
+    // Odeslání obsahu souboru
+    httpd_resp_send(req, buffer, read_bytes); 
+    
+    // Uvolnění alokované paměti
+    free(buffer);
+
+    return ESP_OK;
+}
+esp_err_t js_handler(httpd_req_t *req)
+{
+    // Cesta k souboru na SPIFFS
+    const char *file_path = "/spiffs/index.js";
+    
+    // Otevření souboru pro čtení
+    FILE *f = fopen(file_path, "r");
+    if (f == NULL) {
+        // Pokud se soubor nepodaří otevřít (neexistuje, nebo SPIFFS neni mountnuto)
+        httpd_resp_send_500(req);
+        printf("Chyba: Nepodařilo se otevřít %s\n", file_path);
+        return ESP_FAIL;
+    }
+
+    // Získání velikosti souboru
+    fseek(f, 0, SEEK_END);
+    long file_size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    // Alokace bufferu pro celý obsah souboru + 1 pro '\0'
+    char *buffer = (char *)malloc(file_size + 1);
+    if (buffer == NULL) {
+        fclose(f);
+        httpd_resp_send_500(req);
+        printf("Chyba: Nedostatek paměti pro alokaci bufferu.\n");
+        return ESP_FAIL;
+    }
+
+    // Přečtení obsahu souboru do bufferu
+    size_t read_bytes = fread(buffer, 1, file_size, f);
+    fclose(f);
+    buffer[read_bytes] = '\0'; // Ukončení řetězce
+
+    // Nastavení Content-Type hlavičky
+    httpd_resp_set_type(req, "application/javascript");
+
+    // Odeslání obsahu souboru
+    httpd_resp_send(req, buffer, read_bytes); 
+    
+    // Uvolnění alokované paměti
+    free(buffer);
+
+    return ESP_OK;
+}
 // Handler for turning the LED ON (e.g., accessed via HTTP POST /gpio/on)
 esp_err_t gpio_on_handler(httpd_req_t *req)
 {
-    // Set GPIO pin to high level (ON)
     gpio_set_level(LED_GPIO_PIN, 0); 
     printf("LED/GPIO ON by web request.\n");
-    
-    // Response to the browser
-    httpd_resp_send(req, "<h1>Status: LED is ON</h1><p>Return to <a href=\"/\">Home</a></p>", HTTPD_RESP_USE_STRLEN);
+
+    httpd_resp_set_status(req, "204 No Content");
+    httpd_resp_send(req, NULL, 0);
     return ESP_OK;
 }
+
 
 // Handler for turning the LED OFF (e.g., accessed via HTTP POST /gpio/off)
 esp_err_t gpio_off_handler(httpd_req_t *req)
 {
-    // Set GPIO pin to low level (OFF)
-    gpio_set_level(LED_GPIO_PIN, 1);
+    gpio_set_level(LED_GPIO_PIN, 1); 
     printf("LED/GPIO OFF by web request.\n");
-    
-    // Response to the browser
-    httpd_resp_send(req, "<h1>Status: LED is OFF</h1><p>Return to <a href=\"/\">Home</a></p>", HTTPD_RESP_USE_STRLEN);
+
+    httpd_resp_set_status(req, "204 No Content");
+    httpd_resp_send(req, NULL, 0);
     return ESP_OK;
 }
+
 
 // ===============================================
 // 2. HTTP SERVER STARTUP AND REGISTRATION
@@ -120,6 +208,18 @@ httpd_handle_t start_webserver(void)
         .handler   = index_handler,
         .user_ctx  = NULL
     };
+    httpd_uri_t uri_css = {
+        .uri       = "/styling.css",
+        .method    = HTTP_GET,
+        .handler   = css_handler,
+        .user_ctx  = NULL
+    };
+    httpd_uri_t uri_js = {
+        .uri       = "/index.js",
+        .method    = HTTP_GET,
+        .handler   = js_handler,
+        .user_ctx  = NULL
+    };
 
     if (httpd_start(&server, &config) == ESP_OK) {
         printf("HTTP Server started on port: %d\n", config.server_port);
@@ -127,6 +227,8 @@ httpd_handle_t start_webserver(void)
         httpd_register_uri_handler(server, &uri_on);
         httpd_register_uri_handler(server, &uri_off);
         httpd_register_uri_handler(server, &uri_main);
+        httpd_register_uri_handler(server, &uri_js);
+        httpd_register_uri_handler(server, &uri_css);
     }
     return server;
 }
