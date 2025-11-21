@@ -26,24 +26,24 @@ httpd_handle_t start_webserver(void);
 
 esp_err_t index_handler(httpd_req_t *req)
 {
-    // Cesta k souboru na SPIFFS
+    // Path to the file on SPIFFS
     const char *file_path = "/spiffs/index.html";
     
-    // Otevření souboru pro čtení
+    // Open index.html for reading
     FILE *f = fopen(file_path, "r");
     if (f == NULL) {
-        // Pokud se soubor nepodaří otevřít (neexistuje, nebo SPIFFS neni mountnuto)
+        // If the file cannot be opened (does not exist or SPIFFS is not mounted)
         httpd_resp_send_500(req);
         printf("Chyba: Nepodařilo se otevřít %s\n", file_path);
         return ESP_FAIL;
     }
 
-    // Získání velikosti souboru
+    // Get file size
     fseek(f, 0, SEEK_END);
     long file_size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    // Alokace bufferu pro celý obsah souboru + 1 pro '\0'
+    // Allocate buffer for entire file content + 1 for '\0'
     char *buffer = (char *)malloc(file_size + 1);
     if (buffer == NULL) {
         fclose(f);
@@ -52,42 +52,39 @@ esp_err_t index_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    // Přečtení obsahu souboru do bufferu
+    // Read file content into the buffer
     size_t read_bytes = fread(buffer, 1, file_size, f);
     fclose(f);
-    buffer[read_bytes] = '\0'; // Ukončení řetězce
+    buffer[read_bytes] = '\0'; 
 
-    // Nastavení Content-Type hlavičky
+    // set Content-Type header
     httpd_resp_set_type(req, "text/html");
 
-    // Odeslání obsahu souboru
+    // Send file content
     httpd_resp_send(req, buffer, read_bytes); 
     
-    // Uvolnění alokované paměti
+    // Free memory
     free(buffer);
 
     return ESP_OK;
 }
 esp_err_t css_handler(httpd_req_t *req)
 {
-    // Cesta k souboru na SPIFFS
+    // Path to SPIFFS
     const char *file_path = "/spiffs/styling.css";
     
-    // Otevření souboru pro čtení
     FILE *f = fopen(file_path, "r");
     if (f == NULL) {
-        // Pokud se soubor nepodaří otevřít (neexistuje, nebo SPIFFS neni mountnuto)
+       
         httpd_resp_send_500(req);
         printf("Chyba: Nepodařilo se otevřít %s\n", file_path);
         return ESP_FAIL;
     }
 
-    // Získání velikosti souboru
     fseek(f, 0, SEEK_END);
     long file_size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    // Alokace bufferu pro celý obsah souboru + 1 pro '\0'
     char *buffer = (char *)malloc(file_size + 1);
     if (buffer == NULL) {
         fclose(f);
@@ -96,42 +93,34 @@ esp_err_t css_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    // Přečtení obsahu souboru do bufferu
     size_t read_bytes = fread(buffer, 1, file_size, f);
     fclose(f);
-    buffer[read_bytes] = '\0'; // Ukončení řetězce
+    buffer[read_bytes] = '\0'; 
 
-    // Nastavení Content-Type hlavičky
     httpd_resp_set_type(req, "text/css");
 
-    // Odeslání obsahu souboru
     httpd_resp_send(req, buffer, read_bytes); 
     
-    // Uvolnění alokované paměti
     free(buffer);
 
     return ESP_OK;
 }
 esp_err_t js_handler(httpd_req_t *req)
 {
-    // Cesta k souboru na SPIFFS
+
     const char *file_path = "/spiffs/index.js";
     
-    // Otevření souboru pro čtení
     FILE *f = fopen(file_path, "r");
     if (f == NULL) {
-        // Pokud se soubor nepodaří otevřít (neexistuje, nebo SPIFFS neni mountnuto)
         httpd_resp_send_500(req);
         printf("Chyba: Nepodařilo se otevřít %s\n", file_path);
         return ESP_FAIL;
     }
 
-    // Získání velikosti souboru
     fseek(f, 0, SEEK_END);
     long file_size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    // Alokace bufferu pro celý obsah souboru + 1 pro '\0'
     char *buffer = (char *)malloc(file_size + 1);
     if (buffer == NULL) {
         fclose(f);
@@ -140,23 +129,19 @@ esp_err_t js_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    // Přečtení obsahu souboru do bufferu
     size_t read_bytes = fread(buffer, 1, file_size, f);
     fclose(f);
-    buffer[read_bytes] = '\0'; // Ukončení řetězce
+    buffer[read_bytes] = '\0'; 
 
-    // Nastavení Content-Type hlavičky
     httpd_resp_set_type(req, "application/javascript");
 
-    // Odeslání obsahu souboru
     httpd_resp_send(req, buffer, read_bytes); 
     
-    // Uvolnění alokované paměti
     free(buffer);
 
     return ESP_OK;
 }
-// Handler for turning the LED ON (e.g., accessed via HTTP POST /gpio/on)
+// Handler for turning the LED ON (e.g., accessed via fetch HTTP POST /gpio/on)
 esp_err_t gpio_on_handler(httpd_req_t *req)
 {
     gpio_set_level(LED_GPIO_PIN, 0); 
@@ -168,7 +153,7 @@ esp_err_t gpio_on_handler(httpd_req_t *req)
 }
 
 
-// Handler for turning the LED OFF (e.g., accessed via HTTP POST /gpio/off)
+// Handler for turning the LED OFF (e.g., accessed via fetch HTTP POST /gpio/off)
 esp_err_t gpio_off_handler(httpd_req_t *req)
 {
     gpio_set_level(LED_GPIO_PIN, 1); 
@@ -219,7 +204,7 @@ httpd_handle_t start_webserver(void)
         .method    = HTTP_GET,
         .handler   = js_handler,
         .user_ctx  = NULL
-    };
+    };//you can add more files by making another uri handler
 
     if (httpd_start(&server, &config) == ESP_OK) {
         printf("HTTP Server started on port: %d\n", config.server_port);
@@ -292,7 +277,7 @@ printf("open result: %p\n", f);
         }
         return;
     }else{
-        printf("asi dobry\n");
+        printf("works spiff :thumbsup:\n");
     }
 
 
