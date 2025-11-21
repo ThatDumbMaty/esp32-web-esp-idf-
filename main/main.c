@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include "driver/gpio.h"
+#include "esp_err.h"
+#include "esp_log_level.h"
 #include "hal/gpio_types.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -9,30 +11,68 @@
 #include <esp_event.h>
 #include <nvs_flash.h>
 #include <esp_http_server.h>
+#include <esp_spiffs.h>
 
 #include "wifi_credentials.h"
 
 const char *ssid = WIFI_SSID;
 const char *pass = WIFI_PASS;
 
-#define LED_GPIO_PIN GPIO_NUM_2
+#define LED_GPIO_PIN GPIO_NUM_4
 
 httpd_handle_t start_webserver(void);
 
+
+
 esp_err_t index_handler(httpd_req_t *req)
 {
+    // Cesta k souboru na SPIFFS
+    const char *file_path = "/spiffs/index.html";
     
-    printf("LED/GPIO ON by web request.\n");
+    // Otevření souboru pro čtení
+    FILE *f = fopen(file_path, "r");
+    if (f == NULL) {
+        // Pokud se soubor nepodaří otevřít (neexistuje, nebo SPIFFS neni mountnuto)
+        httpd_resp_send_500(req);
+        printf("Chyba: Nepodařilo se otevřít %s\n", file_path);
+        return ESP_FAIL;
+    }
+
+    // Získání velikosti souboru
+    fseek(f, 0, SEEK_END);
+    long file_size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    // Alokace bufferu pro celý obsah souboru + 1 pro '\0'
+    char *buffer = (char *)malloc(file_size + 1);
+    if (buffer == NULL) {
+        fclose(f);
+        httpd_resp_send_500(req);
+        printf("Chyba: Nedostatek paměti pro alokaci bufferu.\n");
+        return ESP_FAIL;
+    }
+
+    // Přečtení obsahu souboru do bufferu
+    size_t read_bytes = fread(buffer, 1, file_size, f);
+    fclose(f);
+    buffer[read_bytes] = '\0'; // Ukončení řetězce
+
+    // Nastavení Content-Type hlavičky
+    httpd_resp_set_type(req, "text/html");
+
+    // Odeslání obsahu souboru
+    httpd_resp_send(req, buffer, read_bytes); 
     
-    // Response to the browser
-    httpd_resp_send(req, "<h1>Welcome to main page</h1>", HTTPD_RESP_USE_STRLEN);
+    // Uvolnění alokované paměti
+    free(buffer);
+
     return ESP_OK;
 }
 // Handler for turning the LED ON (e.g., accessed via HTTP POST /gpio/on)
 esp_err_t gpio_on_handler(httpd_req_t *req)
 {
     // Set GPIO pin to high level (ON)
-    gpio_set_level(LED_GPIO_PIN, 1); 
+    gpio_set_level(LED_GPIO_PIN, 0); 
     printf("LED/GPIO ON by web request.\n");
     
     // Response to the browser
@@ -44,7 +84,7 @@ esp_err_t gpio_on_handler(httpd_req_t *req)
 esp_err_t gpio_off_handler(httpd_req_t *req)
 {
     // Set GPIO pin to low level (OFF)
-    gpio_set_level(LED_GPIO_PIN, 0);
+    gpio_set_level(LED_GPIO_PIN, 1);
     printf("LED/GPIO OFF by web request.\n");
     
     // Response to the browser
@@ -64,13 +104,13 @@ httpd_handle_t start_webserver(void)
     // URI Handler Registration
     httpd_uri_t uri_on = {
         .uri       = "/gpio/on",
-        .method    = HTTP_GET,
+        .method    = HTTP_POST,
         .handler   = gpio_on_handler,
         .user_ctx  = NULL
     };
     httpd_uri_t uri_off = {
         .uri       = "/gpio/off",
-        .method    = HTTP_GET,
+        .method    = HTTP_POST,
         .handler   = gpio_off_handler,
         .user_ctx  = NULL
     };
@@ -91,7 +131,7 @@ httpd_handle_t start_webserver(void)
     return server;
 }
 
-// ===============================================
+// =============================================s==
 // 3. EVENT HANDLER AND WIFI/GPIO SETUP
 // ===============================================
 
@@ -114,6 +154,46 @@ static void event_handler(void* arg, esp_event_base_t event_base,
         printf("Got IP address: %d.%d.%d.%d\n", IP2STR(&event->ip_info.ip));
         
         // Start the web server after obtaining an IP address
+        esp_vfs_spiffs_conf_t conf = {
+        .base_path = "/spiffs",
+        .partition_label = NULL,
+        .max_files = 5,
+        .format_if_mount_failed = false
+    };
+
+    esp_err_t ret = esp_vfs_spiffs_register(&conf);
+printf("SPIFFS mount: %s\n", esp_err_to_name(ret));
+
+size_t total = 0, used = 0;
+esp_spiffs_info(NULL, &total, &used);
+
+printf("SPIFFS total = %d bytes, used = %d bytes\n", total, used);
+
+FILE *f = fopen("/spiffs/index.html", "r");
+printf("open result: %p\n", f);
+
+    
+
+    if(ret != ESP_OK)
+    {
+        if(ret == ESP_FAIL)
+        {
+        printf("failed to mount or format file system\n");
+        }
+        else if (ret == ESP_ERR_NOT_FOUND) 
+        {
+        printf("failed to find spiffs partition\n");
+        }
+        else 
+        {
+        printf("failed to init spiffs (%s)\n",esp_err_to_name(ret));
+        }
+        return;
+    }else{
+        printf("asi dobry\n");
+    }
+
+
         start_webserver();
     }
 }
@@ -169,4 +249,6 @@ void app_main(void)
     
     // Initialize GPIO pin for output
     gpio_set_direction(LED_GPIO_PIN, GPIO_MODE_OUTPUT);
+
+   
 }

@@ -6,6 +6,9 @@ idf_component_register(SRCS "main.c"
                 "nvs_sec_provider"
                 "nvs_flash"
                 "esp_http_server"
+                "spiffs"
+                "vfs"
             )
+
 
                     
