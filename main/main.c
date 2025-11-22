@@ -2,6 +2,7 @@
 #include "driver/gpio.h"
 #include "esp_err.h"
 #include "esp_log_level.h"
+#include "esp_timer.h"
 #include "hal/gpio_types.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -17,12 +18,76 @@
 
 const char *ssid = WIFI_SSID;
 const char *pass = WIFI_PASS;
-
-#define LED_GPIO_PIN GPIO_NUM_4
+//led
+#define LED_GPIO_PIN GPIO_NUM_21
+//HC-SR04 sensor
+#define TRIG_PIN GPIO_NUM_18
+#define ECHO_PIN GPIO_NUM_19
 
 httpd_handle_t start_webserver(void);
 
+static volatile int64_t start_time = 0;
+static volatile int64_t end_time = 0;
+static volatile bool pulse_captured = false;
 
+static void IRAM_ATTR echo_isr_handler(void* arg) {
+    uint32_t level = gpio_get_level(ECHO_PIN);
+    
+    if (level == 1) { //(LOW -> HIGH)
+        start_time = esp_timer_get_time();
+    } else { //(HIGH -> LOW)
+        end_time = esp_timer_get_time();
+        pulse_captured = true;
+    }
+}
+
+void ultrasonic_init() {
+    // Configure Trig as input
+    gpio_set_direction(TRIG_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_level(TRIG_PIN, 0);
+
+    // Configure Echo as output
+    gpio_set_direction(ECHO_PIN, GPIO_MODE_INPUT);
+    gpio_set_intr_type(ECHO_PIN, GPIO_INTR_ANYEDGE); // Spouštět na obě hrany
+
+    // Install GPIO ISR service
+    gpio_install_isr_service(0);
+    
+    // Connect handler to the Echo pin
+    gpio_isr_handler_add(ECHO_PIN, echo_isr_handler, (void*) ECHO_PIN);
+    printf("setup done\n");
+}
+
+long get_distance_cm() {
+    pulse_captured = false;
+
+
+    gpio_set_level(TRIG_PIN, 0);
+    esp_rom_delay_us(2); 
+    gpio_set_level(TRIG_PIN, 1);
+    esp_rom_delay_us(10); 
+    gpio_set_level(TRIG_PIN, 0);
+
+    int64_t timeout_start = esp_timer_get_time();
+    const int64_t timeout_us = 30000; // 30ms timeout
+
+    while (!pulse_captured) {
+        if (esp_timer_get_time() - timeout_start > timeout_us) {
+            printf("timeout\n");
+            return -1; //timeout
+        }
+        vTaskDelay(1 / portTICK_PERIOD_MS);
+    }
+
+    // 3. Get distance
+    int64_t duration_us = end_time - start_time;
+    
+    // Distance (cm) = (µs) / 58.8
+    // (Speed of sound - 343 m/s = 0.0343 cm/µs. distance = (time * 0.0343) / 2)
+    long distance = duration_us / 58; 
+    
+    return distance;
+}
 
 esp_err_t index_handler(httpd_req_t *req)
 {
@@ -68,6 +133,7 @@ esp_err_t index_handler(httpd_req_t *req)
 
     return ESP_OK;
 }
+
 esp_err_t css_handler(httpd_req_t *req)
 {
     // Path to SPIFFS
@@ -105,6 +171,7 @@ esp_err_t css_handler(httpd_req_t *req)
 
     return ESP_OK;
 }
+
 esp_err_t js_handler(httpd_req_t *req)
 {
 
@@ -152,7 +219,6 @@ esp_err_t gpio_on_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-
 // Handler for turning the LED OFF (e.g., accessed via fetch HTTP POST /gpio/off)
 esp_err_t gpio_off_handler(httpd_req_t *req)
 {
@@ -164,6 +230,35 @@ esp_err_t gpio_off_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+esp_err_t gpio_sensor_handler(httpd_req_t *req)
+{
+    
+    long distance = get_distance_cm();
+    char resp_buf[100];
+    int len;
+    
+    if (distance > 0) {
+        len = snprintf(resp_buf, 100, 
+                       "{\"distance_cm\": %ld}", 
+                       distance);
+        
+        printf("ULTRASONIC: Odesílám JSON: %s", resp_buf); // Log pro kontrolu
+    } else {
+        // Chyba při měření
+        len = snprintf(resp_buf, 100, 
+                       "{\"error\": \"Measurement Timeout\"}");
+        
+        printf("ULTRASONIC: Měření selhalo.");
+        
+    }
+
+    httpd_resp_set_type(req, "application/json"); 
+    httpd_resp_set_status(req, "200 OK");         
+
+    httpd_resp_send(req, resp_buf, len);
+    
+    return ESP_OK;
+}
 
 // ===============================================
 // 2. HTTP SERVER STARTUP AND REGISTRATION
@@ -179,6 +274,12 @@ httpd_handle_t start_webserver(void)
         .uri       = "/gpio/on",
         .method    = HTTP_POST,
         .handler   = gpio_on_handler,
+        .user_ctx  = NULL
+    };
+    httpd_uri_t uri_sensor = {
+        .uri       = "/gpio/sensor",
+        .method    = HTTP_POST,
+        .handler   = gpio_sensor_handler,
         .user_ctx  = NULL
     };
     httpd_uri_t uri_off = {
@@ -214,14 +315,13 @@ httpd_handle_t start_webserver(void)
         httpd_register_uri_handler(server, &uri_main);
         httpd_register_uri_handler(server, &uri_js);
         httpd_register_uri_handler(server, &uri_css);
+        httpd_register_uri_handler(server, &uri_sensor);
     }
     return server;
 }
-
 // =============================================s==
 // 3. EVENT HANDLER AND WIFI/GPIO SETUP
 // ===============================================
-
 
 static void event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
@@ -259,8 +359,6 @@ printf("SPIFFS total = %d bytes, used = %d bytes\n", total, used);
 FILE *f = fopen("/spiffs/index.html", "r");
 printf("open result: %p\n", f);
 
-    
-
     if(ret != ESP_OK)
     {
         if(ret == ESP_FAIL)
@@ -279,8 +377,6 @@ printf("open result: %p\n", f);
     }else{
         printf("works spiff :thumbsup:\n");
     }
-
-
         start_webserver();
     }
 }
@@ -336,6 +432,6 @@ void app_main(void)
     
     // Initialize GPIO pin for output
     gpio_set_direction(LED_GPIO_PIN, GPIO_MODE_OUTPUT);
-
    
+    ultrasonic_init();
 }
